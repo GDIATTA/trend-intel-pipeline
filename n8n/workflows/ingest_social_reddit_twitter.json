@@ -1,0 +1,12 @@
+{
+"name": "03_Ingest_Social_Reddit_Twitter",
+"nodes": [
+{"parameters": {"triggerTimes": {"item": [{"mode": "everyDay", "hour": 2, "minute": 30}]}}, "name": "Cron", "type": "n8n-nodes-base.cron"},
+{"parameters": {"url": "https://www.reddit.com/search.json?q=${QUERY}", "options": {"splitIntoItems": true}}, "name": "Reddit", "type": "n8n-nodes-base.httpRequest"},
+{"parameters": {"url": "https://api.twitter.com/2/tweets/search/recent?query=${QUERY}", "authentication": "predefinedCredentialType", "options": {"splitIntoItems": true}}, "name": "Twitter", "type": "n8n-nodes-base.httpRequest", "credentials": {"twitterOAuth2Api": "Twitter OAuth2"}},
+{"parameters": {"mode": "mergeByIndex"}, "name": "Merge", "type": "n8n-nodes-base.merge"},
+{"parameters": {"functionCode": "// naive sentiment placeholder; replace with API\nfunction s(text){ const t=text.toLowerCase(); if(t.includes('love')||t.includes('great')) return 0.8; if(t.includes('bad')||t.includes('hate')) return -0.6; return 0.0;}\nreturn items.map(i=>({json:{date:(new Date()).toISOString().slice(0,10), sku:null, platform:i.json.platform||'reddit/twitter', mentions:1, sentiment_score:s(i.json.title||i.json.text||'')}}));"}, "name": "Sentiment", "type": "n8n-nodes-base.function"},
+{"parameters": {"operation": "executeQuery", "query": "insert into fact_social(date, product_id, platform, mentions, sentiment_score)\nselect $1::date, p.product_id, $2, $3::int, $4::numeric from dim_product p where ($5 is not null and p.sku=$5)\non conflict (date, product_id, platform) do update set mentions = fact_social.mentions + excluded.mentions, sentiment_score = excluded.sentiment_score;"}, "name": "Upsert", "type": "n8n-nodes-base.postgres", "credentials": {"postgres": "Warehouse Postgres"}}
+],
+"connections": {"Cron": {"main": [[{"node": "Reddit", "type": "main", "index": 0}, {"node": "Twitter", "type": "main", "index": 0}]]}, "Reddit": {"main": [[{"node": "Merge", "type": "main", "index": 0}]]}, "Twitter": {"main": [[{"node": "Merge", "type": "main", "index": 0}]]}, "Merge": {"main": [[{"node": "Sentiment", "type": "main", "index": 0}]]}, "Sentiment": {"main": [[{"node": "Upsert", "type": "main", "index": 0}]]}}
+}

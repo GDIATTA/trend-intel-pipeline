@@ -1,0 +1,10 @@
+{
+"name": "04_Ingest_Google_Trends",
+"nodes": [
+{"parameters": {"triggerTimes": {"item": [{"mode": "everyDay", "hour": 2, "minute": 45}]}}, "name": "Cron", "type": "n8n-nodes-base.cron"},
+{"parameters": {"url": "${GOOGLE_TRENDS_PROXY_URL}/daily?keyword={{$json.sku}}&geo=GLOBAL", "options": {"splitIntoItems": true}}, "name": "Trends", "type": "n8n-nodes-base.httpRequest"},
+{"parameters": {"functionCode": "return items.map(i=>({json:{date:i.json.date, topic:i.json.keyword, region:i.json.geo||'global', score:Number(i.json.value)}}));"}, "name": "Normalize", "type": "n8n-nodes-base.function"},
+{"parameters": {"operation": "insert", "table": "fact_search", "columns": ["date","topic","region","score"]}, "name": "Insert", "type": "n8n-nodes-base.postgres", "credentials": {"postgres": "Warehouse Postgres"}}
+],
+"connections": {"Cron": {"main": [[{"node": "Trends", "type": "main", "index": 0}]]}, "Trends": {"main": [[{"node": "Normalize", "type": "main", "index": 0}]]}, "Normalize": {"main": [[{"node": "Insert", "type": "main", "index": 0}]]}}
+}

@@ -1,0 +1,13 @@
+{
+"name": "08_Orchestrator_Daily",
+"nodes": [
+{"parameters": {"triggerTimes": {"item": [{"mode": "everyDay", "hour": 6}]}}, "name": "Cron 06:00", "type": "n8n-nodes-base.cron"},
+{"parameters": {"workflowId": "01_Ingest_Sales_Shopify"}, "name": "Run Sales", "type": "n8n-nodes-base.executeWorkflow"},
+{"parameters": {"workflowId": "02_Ingest_Web_GA4"}, "name": "Run Web", "type": "n8n-nodes-base.executeWorkflow"},
+{"parameters": {"workflowId": "03_Ingest_Social_Reddit_Twitter"}, "name": "Run Social", "type": "n8n-nodes-base.executeWorkflow"},
+{"parameters": {"workflowId": "04_Ingest_Google_Trends"}, "name": "Run Trends", "type": "n8n-nodes-base.executeWorkflow"},
+{"parameters": {"workflowId": "06_Transform_Aggregate_Trend"}, "name": "Run Aggregate", "type": "n8n-nodes-base.executeWorkflow"},
+{"parameters": {"workflowId": "07_Alerting_Slack"}, "name": "Run Alerts", "type": "n8n-nodes-base.executeWorkflow"}
+],
+"connections": {"Cron 06:00": {"main": [[{"node": "Run Sales", "type": "main", "index": 0}]]}, "Run Sales": {"main": [[{"node": "Run Web", "type": "main", "index": 0}]]}, "Run Web": {"main": [[{"node": "Run Social", "type": "main", "index": 0}]]}, "Run Social": {"main": [[{"node": "Run Trends", "type": "main", "index": 0}]]}, "Run Trends": {"main": [[{"node": "Run Aggregate", "type": "main", "index": 0}]]}, "Run Aggregate": {"main": [[{"node": "Run Alerts", "type": "main", "index": 0}]]}}
+}

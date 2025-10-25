@@ -1,0 +1,9 @@
+{
+"name": "07_Alerting_Slack",
+"nodes": [
+{"parameters": {"operation": "executeQuery", "query": "select * from (\\n\\i sql/05_alert_queries.sql\\n) t limit 20;"}, "name": "Query Alerts", "type": "n8n-nodes-base.postgres", "credentials": {"postgres": "Warehouse Postgres"}},
+{"parameters": {"functionCode": "return items.filter(i=>i.json.wow===null || i.json.wow>=0.6 || i.json.trend_score>=1).map(i=>({json:{text:`:rotating_light: *Trend Surge* — ${i.json.name} (${i.json.sku}) on ${i.json.date}: WoW ${(i.json.wow*100).toFixed(0)}% | Trend ${Number(i.json.trend_score).toFixed(2)} | z_social ${Number(i.json.z_social).toFixed(2)}`}}));"}, "name": "Format", "type": "n8n-nodes-base.function"},
+{"parameters": {"url": "${SLACK_WEBHOOK_URL}", "options": {}, "jsonParameters": true, "options": {"bodyContentType": "json"}}, "name": "Slack Webhook", "type": "n8n-nodes-base.httpRequest"}
+],
+"connections": {"Query Alerts": {"main": [[{"node": "Format", "type": "main", "index": 0}]]}, "Format": {"main": [[{"node": "Slack Webhook", "type": "main", "index": 0}]]}}
+}

@@ -1,0 +1,10 @@
+{
+"name": "01_Ingest_Sales_Shopify",
+"nodes": [
+{"parameters": {"triggerTimes": {"item": [{"mode": "everyDay", "hour": 2}]}}, "name": "Cron", "type": "n8n-nodes-base.cron"},
+{"parameters": {"url": "https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-10/orders.json?status=any&limit=250", "authentication": "predefinedCredentialType", "allowUnauthorizedCerts": false, "options": {"splitIntoItems": true}}, "name": "List Orders", "type": "n8n-nodes-base.httpRequest", "credentials": {"shopifyApi": "Shopify API"}},
+{"parameters": {"functionCode": "// normalize → one row per product per day\nconst out = [];\nfor (const o of items) {\n const date = o.json.created_at.substring(0,10);\n for (const li of o.json.line_items) {\n out.push({json: {date, sku: li.sku, qty: li.quantity, net_revenue: Number(li.price) * li.quantity}});\n }\n}\nreturn out;"}, "name": "Normalize", "type": "n8n-nodes-base.function"},
+{"parameters": {"operation": "executeQuery", "query": "insert into fact_sales(date, product_id, orders, qty, net_revenue)\nselect $1::date, p.product_id, 1, $2::int, $3::numeric\nfrom dim_product p where p.sku = $4\non conflict (date, product_id, coalesce(channel,'all')) do update\nset orders = fact_sales.orders + 1, qty = fact_sales.qty + excluded.qty, net_revenue = fact_sales.net_revenue + excluded.net_revenue;", "additionalFields": {}}, "name": "Upsert Postgres", "type": "n8n-nodes-base.postgres", "credentials": {"postgres": "Warehouse Postgres"}}
+],
+"connections": {"List Orders": {"main": [[{"node": "Normalize", "type": "main", "index": 0}]]}, "Cron": {"main": [[{"node": "List Orders", "type": "main", "index": 0}]]}, "Normalize": {"main": [[{"node": "Upsert Postgres", "type": "main", "index": 0}]]}}
+}

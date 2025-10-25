@@ -1,0 +1,1 @@
+select * from agg_trend_daily where product_id = {{product_id}} order by date asc;

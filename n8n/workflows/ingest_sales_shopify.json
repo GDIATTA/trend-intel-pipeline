@@ -1,5 +1,5 @@
 {
-"name": "01_Ingest_Sales_Shopify",
+"name": "ingest_sales_shopify",
 "nodes": [
 {"parameters": {"triggerTimes": {"item": [{"mode": "everyDay", "hour": 2}]}}, "name": "Cron", "type": "n8n-nodes-base.cron"},
 {"parameters": {"url": "https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-10/orders.json?status=any&limit=250", "authentication": "predefinedCredentialType", "allowUnauthorizedCerts": false, "options": {"splitIntoItems": true}}, "name": "List Orders", "type": "n8n-nodes-base.httpRequest", "credentials": {"shopifyApi": "Shopify API"}},

@@ -1,10 +1,97 @@
 {
-"name": "04_Ingest_Google_Trends",
-"nodes": [
-{"parameters": {"triggerTimes": {"item": [{"mode": "everyDay", "hour": 2, "minute": 45}]}}, "name": "Cron", "type": "n8n-nodes-base.cron"},
-{"parameters": {"url": "${GOOGLE_TRENDS_PROXY_URL}/daily?keyword={{$json.sku}}&geo=GLOBAL", "options": {"splitIntoItems": true}}, "name": "Trends", "type": "n8n-nodes-base.httpRequest"},
-{"parameters": {"functionCode": "return items.map(i=>({json:{date:i.json.date, topic:i.json.keyword, region:i.json.geo||'global', score:Number(i.json.value)}}));"}, "name": "Normalize", "type": "n8n-nodes-base.function"},
-{"parameters": {"operation": "insert", "table": "fact_search", "columns": ["date","topic","region","score"]}, "name": "Insert", "type": "n8n-nodes-base.postgres", "credentials": {"postgres": "Warehouse Postgres"}}
-],
-"connections": {"Cron": {"main": [[{"node": "Trends", "type": "main", "index": 0}]]}, "Trends": {"main": [[{"node": "Normalize", "type": "main", "index": 0}]]}, "Normalize": {"main": [[{"node": "Insert", "type": "main", "index": 0}]]}}
+  "name": "04_Ingest_Google_Trends",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            { "mode": "everyDay", "hour": 2, "minute": 45 }
+          ]
+        }
+      },
+      "id": "Cron",
+      "name": "Cron",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [-620, -40]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select sku from dim_product where active_to is null or active_to >= current_date"
+      },
+      "id": "GetSKUs",
+      "name": "Get SKUs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [-400, -40],
+      "credentials": {
+        "postgres": {
+          "id": "Warehouse Postgres",
+          "name": "Warehouse Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "{{$env.GOOGLE_TRENDS_PROXY_URL}}/daily?keyword={{$json.sku}}&geo=GLOBAL",
+        "options": {
+          "splitIntoItems": true
+        }
+      },
+      "id": "Trends",
+      "name": "Trends",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [-160, -40]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(i => ({\n  json: {\n    date: i.json.date,\n    topic: i.json.keyword,\n    region: i.json.geo || 'global',\n    score: Number(i.json.value)\n  }\n}));"
+      },
+      "id": "Normalize",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [60, -40]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "",
+        "table": "fact_search",
+        "columns": [
+          "date",
+          "topic",
+          "region",
+          "score"
+        ]
+      },
+      "id": "Insert",
+      "name": "Insert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [300, -40],
+      "credentials": {
+        "postgres": {
+          "id": "Warehouse Postgres",
+          "name": "Warehouse Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cron": {
+      "main": [[{ "node": "Get SKUs", "type": "main", "index": 0 }]]
+    },
+    "Get SKUs": {
+      "main": [[{ "node": "Trends", "type": "main", "index": 0 }]]
+    },
+    "Trends": {
+      "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]]
+    },
+    "Normalize": {
+      "main": [[{ "node": "Insert", "type": "main", "index": 0 }]]
+    }
+  }
 }

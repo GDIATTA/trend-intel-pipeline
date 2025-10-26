@@ -17,8 +17,8 @@ orders int default 0,
 qty int default 0,
 gross_revenue numeric(12,2) default 0,
 net_revenue numeric(12,2) default 0,
-channel text,
-primary key (date, product_id, coalesce(channel,'all'))
+channel       text NOT NULL DEFAULT 'all',
+PRIMARY KEY (date, product_id, channel)
 );
 
 

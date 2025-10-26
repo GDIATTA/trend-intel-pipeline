@@ -1,12 +1,132 @@
 {
-"name": "03_Ingest_Social_Reddit_Twitter",
-"nodes": [
-{"parameters": {"triggerTimes": {"item": [{"mode": "everyDay", "hour": 2, "minute": 30}]}}, "name": "Cron", "type": "n8n-nodes-base.cron"},
-{"parameters": {"url": "https://www.reddit.com/search.json?q=${QUERY}", "options": {"splitIntoItems": true}}, "name": "Reddit", "type": "n8n-nodes-base.httpRequest"},
-{"parameters": {"url": "https://api.twitter.com/2/tweets/search/recent?query=${QUERY}", "authentication": "predefinedCredentialType", "options": {"splitIntoItems": true}}, "name": "Twitter", "type": "n8n-nodes-base.httpRequest", "credentials": {"twitterOAuth2Api": "Twitter OAuth2"}},
-{"parameters": {"mode": "mergeByIndex"}, "name": "Merge", "type": "n8n-nodes-base.merge"},
-{"parameters": {"functionCode": "// naive sentiment placeholder; replace with API\nfunction s(text){ const t=text.toLowerCase(); if(t.includes('love')||t.includes('great')) return 0.8; if(t.includes('bad')||t.includes('hate')) return -0.6; return 0.0;}\nreturn items.map(i=>({json:{date:(new Date()).toISOString().slice(0,10), sku:null, platform:i.json.platform||'reddit/twitter', mentions:1, sentiment_score:s(i.json.title||i.json.text||'')}}));"}, "name": "Sentiment", "type": "n8n-nodes-base.function"},
-{"parameters": {"operation": "executeQuery", "query": "insert into fact_social(date, product_id, platform, mentions, sentiment_score)\nselect $1::date, p.product_id, $2, $3::int, $4::numeric from dim_product p where ($5 is not null and p.sku=$5)\non conflict (date, product_id, platform) do update set mentions = fact_social.mentions + excluded.mentions, sentiment_score = excluded.sentiment_score;"}, "name": "Upsert", "type": "n8n-nodes-base.postgres", "credentials": {"postgres": "Warehouse Postgres"}}
-],
-"connections": {"Cron": {"main": [[{"node": "Reddit", "type": "main", "index": 0}, {"node": "Twitter", "type": "main", "index": 0}]]}, "Reddit": {"main": [[{"node": "Merge", "type": "main", "index": 0}]]}, "Twitter": {"main": [[{"node": "Merge", "type": "main", "index": 0}]]}, "Merge": {"main": [[{"node": "Sentiment", "type": "main", "index": 0}]]}, "Sentiment": {"main": [[{"node": "Upsert", "type": "main", "index": 0}]]}}
+  "name": "03_Ingest_Social_Reddit_Twitter",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            { "mode": "everyDay", "hour": 2, "minute": 30 }
+          ]
+        }
+      },
+      "id": "Cron",
+      "name": "Cron",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [-520, -80]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            { "name": "query", "value": "iphone OR samsung" }
+          ]
+        }
+      },
+      "id": "SetQuery",
+      "name": "Set Query",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [-320, -80]
+    },
+    {
+      "parameters": {
+        "url": "https://www.reddit.com/search.json?q={{$json.query}}&limit=25",
+        "options": {
+          "splitIntoItems": true
+        },
+        "sendHeaders": true,
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "User-Agent", "value": "n8n-trend-pipeline/1.0" }
+          ]
+        }
+      },
+      "id": "Reddit",
+      "name": "Reddit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [-100, -160]
+    },
+    {
+      "parameters": {
+        "url": "https://api.twitter.com/2/tweets/search/recent?query={{encodeURI($json.query)}}&max_results=25&tweet.fields=created_at,lang",
+        "authentication": "predefinedCredentialType",
+        "options": {
+          "splitIntoItems": true
+        }
+      },
+      "id": "Twitter",
+      "name": "Twitter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [-100, 0],
+      "credentials": {
+        "twitterOAuth2Api": {
+          "id": "Twitter OAuth2",
+          "name": "Twitter OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "mergeByIndex"
+      },
+      "id": "Merge",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [120, -80]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Map Reddit/Twitter rows to a common shape + naive sentiment\nfunction score(text=''){\n  const t = (text||'').toLowerCase();\n  if (t.includes('love') || t.includes('great') || t.includes('awesome')) return 0.8;\n  if (t.includes('bad') || t.includes('hate') || t.includes('terrible')) return -0.6;\n  return 0.0;\n}\n\nreturn items.map(i => {\n  const j = i.json || {};\n  // Try to detect source/platform and text\n  let platform = 'social';\n  let text = '';\n  if (j.kind === 'Listing' || j.data?.children || j.data?.title) { // redditish\n    platform = 'reddit';\n    text = j.title || j.data?.title || j.data?.selftext || '';\n  } else if (j.text || j.data?.text || j.data?.id || j.id) { // twitterish (already normalized by HTTP node)\n    platform = 'twitter';\n    text = j.text || j.data?.text || '';\n  } else if (j.data?.text) {\n    platform = 'twitter';\n    text = j.data.text;\n  }\n\n  return {\n    json: {\n      date: new Date().toISOString().slice(0,10),\n      sku: null,                              // optional: map via alias later\n      platform,\n      mentions: 1,\n      sentiment_score: score(text)\n    }\n  };\n});"
+      },
+      "id": "Sentiment",
+      "name": "Sentiment",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [340, -80]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into fact_social(date, product_id, platform, mentions, sentiment_score)\\nselect $1::date, p.product_id, $2, $3::int, $4::numeric\\nfrom dim_product p\\nwhere ($5 is not null and p.sku = $5)\\non conflict (date, product_id, platform) do update\\nset mentions = fact_social.mentions + excluded.mentions,\\n    sentiment_score = excluded.sentiment_score;",
+        "values": [
+          { "name": "date", "value": "={{$json.date}}" },
+          { "name": "platform", "value": "={{$json.platform}}" },
+          { "name": "mentions", "value": "={{$json.mentions}}" },
+          { "name": "sentiment", "value": "={{$json.sentiment_score}}" },
+          { "name": "sku", "value": "={{$json.sku}}" }
+        ]
+      },
+      "id": "Upsert",
+      "name": "Upsert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [600, -80],
+      "credentials": {
+        "postgres": {
+          "id": "Warehouse Postgres",
+          "name": "Warehouse Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cron": {
+      "main": [[{ "node": "Set Query", "type": "main", "index": 0 }]]
+    },
+    "Set Query": {
+      "main": [[
+        { "node": "Reddit", "type": "main", "index": 0 },
+        { "node": "Twitter", "type": "main", "index": 0 }
+      ]]
+    },
+    "Reddit": { "main": [[{ "node": "Merge", "type": "main", "index": 0 }]] },
+    "Twitter": { "main": [[{ "node": "Merge", "type": "main", "index": 1 }]] },
+    "Merge": { "main": [[{ "node": "Sentiment", "type": "main", "index": 0 }]] },
+    "Sentiment": { "main": [[{ "node": "Upsert", "type": "main", "index": 0 }]] }
+  }
 }

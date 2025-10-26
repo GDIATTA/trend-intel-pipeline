@@ -1,10 +1,64 @@
 {
-"name": "02_Ingest_Web_GA4",
-"nodes": [
-{"parameters": {"triggerTimes": {"item": [{"mode": "everyDay", "hour": 2, "minute": 15}]}}, "name": "Cron", "type": "n8n-nodes-base.cron"},
-{"parameters": {"url": "https://analyticsdata.googleapis.com/v1beta/properties/${GA4_PROPERTY_ID}:runReport", "authentication": "oAuth2", "options": {"bodyContentType": "json"}, "sendBody": true, "jsonParameters": true, "options": {"splitIntoItems": true}, "bodyParametersJson": "{\\n \\\"dateRanges\\\":[{\\\"startDate\\\":\\\"8daysAgo\\\",\\\"endDate\\\":\\\"yesterday\\\"}],\\n \\\"metrics\\\":[{\\\"name\\\":\\\"sessions\\\"},{\\\"name\\\":\\\"screenPageViews\\\"}],\\n \\\"dimensions\\\":[{\\\"name\\\":\\\"date\\\"},{\\\"name\\\":\\\"pagePath\\\"}]\\n}"}, "name": "GA4", "type": "n8n-nodes-base.httpRequest", "credentials": {"googleAnalyticsOAuth2Api": "GA4 OAuth"}},
-{"parameters": {"functionCode": "// map pagePath to SKU if present\nreturn items.map(i => ({json: {date: i.json.dimensionValues[0].value, sku: i.json.dimensionValues[1].value.split('sku=')[1] || null, sessions: Number(i.json.metricValues[0].value), pageviews: Number(i.json.metricValues[1].value)}}));"}, "name": "Normalize", "type": "n8n-nodes-base.function"},
-{"parameters": {"operation": "executeQuery", "query": "insert into fact_web(date, product_id, sessions, pageviews)\nselect $1::date, p.product_id, $2::int, $3::int from dim_product p where p.sku = $4\non conflict (date, product_id) do update set sessions=excluded.sessions, pageviews=excluded.pageviews;"}, "name": "Upsert", "type": "n8n-nodes-base.postgres", "credentials": {"postgres": "Warehouse Postgres"}}
-],
-"connections": {"Cron": {"main": [[{"node": "GA4", "type": "main", "index": 0}]]}, "GA4": {"main": [[{"node": "Normalize", "type": "main", "index": 0}]]}, "Normalize": {"main": [[{"node": "Upsert", "type": "main", "index": 0}]]}}
+  "name": "02_Ingest_Web_GA4",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": { "item": [{ "mode": "everyDay", "hour": 2, "minute": 15 }] }
+      },
+      "id": "Cron",
+      "name": "Cron",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [-460, 80]
+    },
+    {
+      "parameters": {
+        "url": "https://analyticsdata.googleapis.com/v1beta/properties/${GA4_PROPERTY_ID}:runReport",
+        "authentication": "oAuth2",
+        "jsonParameters": true,
+        "options": { "bodyContentType": "json", "splitIntoItems": true, "response": { "responseFormat": "json" } },
+        "sendBody": true,
+        "bodyParametersJson": "{\n  \"dateRanges\":[{\"startDate\":\"8daysAgo\",\"endDate\":\"yesterday\"}],\n  \"metrics\":[{\"name\":\"sessions\"},{\"name\":\"screenPageViews\"}],\n  \"dimensions\":[{\"name\":\"date\"},{\"name\":\"pagePath\"}]\n}"
+      },
+      "id": "GA4",
+      "name": "GA4",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [-240, 80],
+      "credentials": { "googleAnalyticsOAuth2Api": { "id": "GA4 OAuth", "name": "GA4 OAuth" } }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Map GA4 rows to our schema\n// Expecting response.rows[].dimensionValues/metricValues\nconst out = [];\nfor (const it of items) {\n  const r = it.json.row || it.json; // handle splitIntoItems variations\n  const dims = r.dimensionValues || r.dimensionvalues || [];\n  const mets = r.metricValues || r.metricvalues || [];\n  const date = (dims[0]?.value || '').replace(/(\\d{4})(\\d{2})(\\d{2})/, '$1-$2-$3');\n  const pagePath = dims[1]?.value || '';\n  const sku = (pagePath.includes('sku=') ? pagePath.split('sku=')[1].split(/[&#?]/)[0] : null);\n  out.push({ json: {\n    date,\n    sku,\n    sessions: Number(mets[0]?.value || 0),\n    pageviews: Number(mets[1]?.value || 0)\n  }});\n}\nreturn out;"
+      },
+      "id": "Normalize",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [-20, 80]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into fact_web(date, product_id, sessions, pageviews)\nselect $1::date, p.product_id, $2::int, $3::int\nfrom dim_product p where p.sku = $4\non conflict (date, product_id) do update\nset sessions = excluded.sessions,\n    pageviews = excluded.pageviews;",
+        "values": [
+          { "name": "date", "value": "={{$json.date}}" },
+          { "name": "sessions", "value": "={{$json.sessions}}" },
+          { "name": "pageviews", "value": "={{$json.pageviews}}" },
+          { "name": "sku", "value": "={{$json.sku}}" }
+        ]
+      },
+      "id": "UpsertPG",
+      "name": "Upsert Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [220, 80],
+      "credentials": { "postgres": { "id": "Warehouse Postgres", "name": "Warehouse Postgres" } }
+    }
+  ],
+  "connections": {
+    "Cron": { "main": [[{ "node": "GA4", "type": "main", "index": 0 }]] },
+    "GA4": { "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]] },
+    "Normalize": { "main": [[{ "node": "Upsert Postgres", "type": "main", "index": 0 }]] }
+  }
 }

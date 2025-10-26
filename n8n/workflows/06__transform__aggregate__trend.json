@@ -1,0 +1,30 @@
+{
+  "name": "06_Transform_Aggregate_Trend",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": { "item": [{ "mode": "everyDay", "hour": 3, "minute": 0 }] }
+      },
+      "id": "Cron",
+      "name": "Cron",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [-460, 260]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Insert / upsert trend aggregates\nwith\nsales as (\n  select s.date, s.product_id,\n         greatest(-3, least(3, (s.net_revenue - avg(s.net_revenue) over w)\n               / nullif(stddev_pop(s.net_revenue) over w,0))) as z_sales\n  from (\n    select date, product_id, sum(net_revenue) as net_revenue\n    from fact_sales group by 1,2\n  ) s\n  window w as (partition by product_id order by date rows between 13 preceding and current row)\n),\nsocial as (\n  select d.date, d.product_id,\n         greatest(-3, least(3, (d.mentions - avg(d.mentions) over w)\n               / nullif(stddev_pop(d.mentions) over w,0))) as z_social\n  from (\n    select date, product_id, sum(mentions) as mentions, avg(sentiment_score) as sentiment\n    from fact_social group by 1,2\n  ) d\n  window w as (partition by product_id order by date rows between 13 preceding and current row)\n),\nweb as (\n  select w.date, w.product_id,\n         greatest(-3, least(3, (w.sessions - avg(w.sessions) over win)\n               / nullif(stddev_pop(w.sessions) over win,0))) as z_web\n  from fact_web w\n  window win as (partition by product_id order by date rows between 13 preceding and current row)\n)\ninsert into agg_trend_daily (date, product_id, trend_score, wow_change, source_breakdown_json)\nselect d.date, d.product_id,\n       0.40*coalesce(s.z_sales,0) + 0.30*coalesce(o.z_social,0) + 0.15*0 + 0.15*coalesce(w.z_web,0) as trend_score,\n       null,\n       jsonb_build_object('z_sales', s.z_sales, 'z_social', o.z_social, 'z_web', w.z_web)\nfrom (\n  select date, product_id from fact_sales\n  union select date, product_id from fact_social\n  union select date, product_id from fact_web\n) d\nleft join sales s on s.date=d.date and s.product_id=d.product_id\nleft join social o on o.date=d.date and o.product_id=d.product_id\nleft join web w on w.date=d.date and w.product_id=d.product_id\non conflict (date, product_id) do update\nset trend_score=excluded.trend_score,\n    source_breakdown_json=excluded.source_breakdown_json;"
+      },
+      "id": "RunSQL",
+      "name": "Run SQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [-200, 260],
+      "credentials": { "postgres": { "id": "Warehouse Postgres", "name": "Warehouse Postgres" } }
+    }
+  ],
+  "connections": {
+    "Cron": { "main": [[{ "node": "Run SQL", "type": "main", "index": 0 }]] }
+  }
+}

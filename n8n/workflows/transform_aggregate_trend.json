@@ -1,8 +1,0 @@
-{
-"name": "06_Transform_Aggregate_Trend",
-"nodes": [
-{"parameters": {"triggerTimes": {"item": [{"mode": "everyDay", "hour": 3}]}}, "name": "Cron", "type": "n8n-nodes-base.cron"},
-{"parameters": {"operation": "executeQuery", "query": "\\pset on_error_stop on; BEGIN; \n\\i sql/04_trend_aggregate.sql; \nCOMMIT;"}, "name": "Run SQL", "type": "n8n-nodes-base.postgres", "credentials": {"postgres": "Warehouse Postgres"}}
-],
-"connections": {"Cron": {"main": [[{"node": "Run SQL", "type": "main", "index": 0}]]}}
-}

@@ -1,9 +1,61 @@
 {
-"name": "07_Alerting_Slack",
-"nodes": [
-{"parameters": {"operation": "executeQuery", "query": "select * from (\\n\\i sql/05_alert_queries.sql\\n) t limit 20;"}, "name": "Query Alerts", "type": "n8n-nodes-base.postgres", "credentials": {"postgres": "Warehouse Postgres"}},
-{"parameters": {"functionCode": "return items.filter(i=>i.json.wow===null || i.json.wow>=0.6 || i.json.trend_score>=1).map(i=>({json:{text:`:rotating_light: *Trend Surge* — ${i.json.name} (${i.json.sku}) on ${i.json.date}: WoW ${(i.json.wow*100).toFixed(0)}% | Trend ${Number(i.json.trend_score).toFixed(2)} | z_social ${Number(i.json.z_social).toFixed(2)}`}}));"}, "name": "Format", "type": "n8n-nodes-base.function"},
-{"parameters": {"url": "${SLACK_WEBHOOK_URL}", "options": {}, "jsonParameters": true, "options": {"bodyContentType": "json"}}, "name": "Slack Webhook", "type": "n8n-nodes-base.httpRequest"}
-],
-"connections": {"Query Alerts": {"main": [[{"node": "Format", "type": "main", "index": 0}]]}, "Format": {"main": [[{"node": "Slack Webhook", "type": "main", "index": 0}]]}}
+  "name": "07_Alerting_Slack",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "with wow_mentions as (\n  select a.date, a.product_id,\n         a.mentions,\n         b.mentions as mentions_prev_week,\n         case when b.mentions is null or b.mentions=0 then null\n              else (a.mentions - b.mentions)/b.mentions::numeric end as wow\n  from (\n    select date, product_id, sum(mentions) as mentions from fact_social group by 1,2\n  ) a\n  left join (\n    select date + interval '7 days' as date, product_id, sum(mentions) as mentions from fact_social group by 1,2\n  ) b using (date, product_id)\n)\nselect p.sku, p.name, w.date, w.wow, a.trend_score,\n       (a.source_breakdown_json->>'z_social')::numeric as z_social\nfrom wow_mentions w\njoin agg_trend_daily a on a.date=w.date and a.product_id=w.product_id\njoin dim_product p on p.product_id = a.product_id\nwhere (w.wow >= 0.60) or (a.trend_score - lag(a.trend_score) over (partition by a.product_id order by a.date) >= 1.0)\norder by w.date desc, a.trend_score desc\nlimit 20;"
+      },
+      "id": "QueryAlerts",
+      "name": "Query Alerts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [-520, 200],
+      "credentials": {
+        "postgres": {
+          "id": "Warehouse Postgres",
+          "name": "Warehouse Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// If query returns no rows, emit one dummy item so Slack node can be tested\nif (items.length === 0) {\n  return [{ json: { name: \"No alerts\", sku: \"-\", date: new Date().toISOString().slice(0,10), wow: null, trend_score: 0, z_social: 0, _dummy: true } }];\n}\nreturn items;"
+      },
+      "id": "EnsureAtLeastOne",
+      "name": "Ensure At Least One",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [-280, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items.map(i => {\n  const r = i.json;\n  const wowPct = (r.wow == null) ? 'N/A' : `${Math.round(r.wow*100)}%`;\n  const prefix = r._dummy ? ':information_source:' : ':rotating_light:';\n  return { json: { text: `${prefix} *Trend Surge* — ${r.name} (${r.sku}) on ${r.date}: WoW ${wowPct} | Trend ${Number(r.trend_score||0).toFixed(2)} | z_social ${Number(r.z_social||0).toFixed(2)}` } };\n});"
+      },
+      "id": "Format",
+      "name": "Format",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [-40, 200]
+    },
+    {
+      "parameters": {
+        "url": "{{$env.SLACK_WEBHOOK_URL}}",
+        "jsonParameters": true,
+        "options": { "bodyContentType": "json" },
+        "sendBody": true,
+        "bodyParametersJson": "={{$json}}"
+      },
+      "id": "SlackWebhook",
+      "name": "Slack Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [220, 200]
+    }
+  ],
+  "connections": {
+    "Query Alerts": { "main": [[{ "node": "Ensure At Least One", "type": "main", "index": 0 }]] },
+    "Ensure At Least One": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
+    "Format": { "main": [[{ "node": "Slack Webhook", "type": "main", "index": 0 }]] }
+  }
 }

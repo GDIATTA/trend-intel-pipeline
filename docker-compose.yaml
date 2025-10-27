@@ -29,6 +29,8 @@ services:
     - N8N_PROTOCOL=${N8N_PROTOCOL}
     - N8N_PORT=${N8N_PORT}
     - GOOGLE_TRENDS_PROXY_URL=${GOOGLE_TRENDS_PROXY_URL}
+    extra_hosts:
+     - "host.docker.internal:host-gateway"
     ports:
       - "5678:5678"
     volumes:

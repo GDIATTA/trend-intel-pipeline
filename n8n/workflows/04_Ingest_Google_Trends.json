@@ -34,7 +34,7 @@
     },
     {
       "parameters": {
-        "url": "{{$env.GOOGLE_TRENDS_PROXY_URL}}/daily?keyword={{$json.sku}}&geo=GLOBAL",
+        "url": "{{$env.GOOGLE_TRENDS_PROXY_URL}}/daily?keyword={{encodeURIComponent($json.sku)}}&geo=GLOBAL",
         "options": {
           "splitIntoItems": true
         }

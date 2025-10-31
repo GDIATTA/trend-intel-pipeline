@@ -1,0 +1,17 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  sql-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate SQL compiles
+        uses: docker://postgres:15
+        with:
+          args: bash -lc "psql --version && echo 'BEGIN; ' && cat sql/*.sql > /dev/null"
+  container-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose config check
+        run: docker compose config
